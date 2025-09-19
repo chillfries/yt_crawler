@@ -83,7 +83,7 @@ class YoutubeCrawler:
             return
         
         print("검색 중...")
-        search_results, _ = await self.youtube_api.search_videos(self.keyword, 10, None)
+        search_results, _ = await self.youtube_api.search_videos(self.keyword, 20, None)
         
         if not search_results:
             print("검색 결과가 없습니다")
