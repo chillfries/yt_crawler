@@ -59,6 +59,18 @@ class LLMExtractor:
         if valid_steps < 2:
             return False, f"Too few valid recipe steps: {valid_steps}"
         
+        difficulty = extracted_info.get('difficulty', '').strip()
+        if difficulty:
+            valid_difficulties = ['매우 쉬움', '쉬움', '보통', '어려움', '매우 어려움']
+            if difficulty not in valid_difficulties:
+                extracted_info['difficulty'] = '보통'
+        else:
+            extracted_info['difficulty'] = '보통'
+        
+        cooking_time = extracted_info.get('cooking_time', '').strip()
+        if not cooking_time:
+            extracted_info['cooking_time'] = '정보 없음'
+        
         return True, "Valid"
 
     def _generate_prompt(self, text):
@@ -66,8 +78,10 @@ class LLMExtractor:
 
 요구사항:
 - dish_name: 요리명 (필수)
-- ingredients: [{{"name":"재료명", "quantity":"수량"}}] 형태 배열
+- ingredients: [{{"name":"재료명", "quantity":"수량"}}] 형태 배열  
 - recipe: [{{"step":번호, "instruction":"조리과정"}}] 형태 배열
+- difficulty: 요리 난이도 ("매우 쉬움", "쉬움", "보통", "어려움", "매우 어려움" 중 하나)
+- cooking_time: 총 요리 시간 (예: "30분", "1시간 30분")
 - JSON 형식만 응답
 
 텍스트:

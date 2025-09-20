@@ -35,7 +35,9 @@ class DBHandler:
                     data JSONB,
                     dish_name VARCHAR(255),
                     ingredients JSONB,
-                    recipe JSONB
+                    recipe JSONB,
+                    difficulty VARCHAR(50),
+                    cooking_time VARCHAR(50)
                 );
             """)
             
@@ -70,19 +72,23 @@ class DBHandler:
         dish_name = data.get("dish_name")
         ingredients = json.dumps(data.get("ingredients", [])) if data.get("ingredients") else None
         recipe = json.dumps(data.get("recipe", [])) if data.get("recipe") else None
+        difficulty = data.get("difficulty")
+        cooking_time = data.get("cooking_time")
         data_json = json.dumps(data)
 
         try:
             with self.conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO recipes (video_id, data, dish_name, ingredients, recipe)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO recipes (video_id, data, dish_name, ingredients, recipe, difficulty, cooking_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (video_id) DO UPDATE SET 
                         data = EXCLUDED.data,
                         dish_name = EXCLUDED.dish_name,
                         ingredients = EXCLUDED.ingredients,
-                        recipe = EXCLUDED.recipe;
-                """, (video_id, data_json, dish_name, ingredients, recipe))
+                        recipe = EXCLUDED.recipe,
+                        difficulty = EXCLUDED.difficulty,
+                        cooking_time = EXCLUDED.cooking_time;
+                """, (video_id, data_json, dish_name, ingredients, recipe, difficulty, cooking_time))
             self.logger.info(f"Video {video_id} saved successfully")
             return True
         except Exception as e:
