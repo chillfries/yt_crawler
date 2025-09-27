@@ -15,6 +15,8 @@ class Config:
     
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
+    LLM_MAX_INPUT_CHARS = int(os.getenv("LLM_MAX_INPUT_CHARS", "15000"))
+
     CONCURRENCY_LIMIT = int(os.getenv("CONCURRENCY_LIMIT", "5"))
     TIMEOUT_SECONDS = int(os.getenv("TIMEOUT_SECONDS", "30"))
     YTDLP_TIMEOUT = int(os.getenv("YTDLP_TIMEOUT", "60"))

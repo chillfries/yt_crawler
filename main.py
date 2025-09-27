@@ -43,15 +43,21 @@ class RecipeCrawlerPipeline:
         return cleaned_count
     
     def run_extraction(self):
-        print("\n" + "=" * 50)
-        print("3단계: 레시피 추출")
+        print("=" * 50)
+        print("3단계: LLM을 이용한 레시피 추출")
         print("=" * 50)
         
         extractor = LLMExtractor()
-        extracted_count = extractor.run()
         
-        print(f"추출 완료: {extracted_count}개 비디오")
-        self.logger.info(f"Extraction completed: {extracted_count} videos")
+        try:
+            extracted_count = asyncio.run(extractor.run())
+        except Exception as e:
+            print(f"\n 추출 단계 실행 중 오류: {e}")
+            self.logger.error(f"Extraction step error: {e}")
+            return 0
+        
+        print(f"추출 완료: {extracted_count}개 레시피")
+        self.logger.info(f"Extraction completed: {extracted_count} recipes")
         return extracted_count
     
     def run_full_pipeline(self, keyword: str):
