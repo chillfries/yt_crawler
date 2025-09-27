@@ -34,6 +34,7 @@ class DBHandler:
                     video_id VARCHAR(255) PRIMARY KEY,
                     data JSONB,
                     dish_name VARCHAR(255),
+                    category VARCHAR(255),    
                     ingredients JSONB,
                     recipe JSONB,
                     difficulty VARCHAR(50),
@@ -70,6 +71,7 @@ class DBHandler:
 
     def insert_or_update_video(self, video_id, data):
         dish_name = data.get("dish_name")
+        category = data.get('category', '')
         ingredients = json.dumps(data.get("ingredients", [])) if data.get("ingredients") else None
         recipe = json.dumps(data.get("recipe", [])) if data.get("recipe") else None
         difficulty = data.get("difficulty")
@@ -84,6 +86,7 @@ class DBHandler:
                     ON CONFLICT (video_id) DO UPDATE SET 
                         data = EXCLUDED.data,
                         dish_name = EXCLUDED.dish_name,
+                        category = EXCLUDED.category,    
                         ingredients = EXCLUDED.ingredients,
                         recipe = EXCLUDED.recipe,
                         difficulty = EXCLUDED.difficulty,

@@ -17,13 +17,13 @@ class LLMExtractor:
             self.logger.error("GEMINI_API_KEY is not set in config.")
             return None
         genai.configure(api_key=Config.GEMINI_API_KEY)
-        return genai.GenerativeModel('gemini-1.5-flash')
+        return genai.GenerativeModel('gemini-2.5-flash')
 
     def _validate_extracted_data(self, extracted_info):
         if not extracted_info:
             return False, "No data extracted"
         
-        required_fields = ['dish_name', 'ingredients', 'recipe']
+        required_fields = ['dish_name', 'category', 'ingredients', 'recipe', 'difficulty', 'cooking_time']
         for field in required_fields:
             if field not in extracted_info:
                 return False, f"Missing field: {field}"
@@ -70,14 +70,24 @@ class LLMExtractor:
         cooking_time = extracted_info.get('cooking_time', '').strip()
         if not cooking_time:
             extracted_info['cooking_time'] = '정보 없음'
-        
-        return True, "Valid"
+
+        category = extracted_info.get('category', '').strip()
+        if not category or len(category) < 2:
+            return False, "Category name too short or empty"
+            
+        return True, "Valid"    
 
     def _generate_prompt(self, text):
         prompt = f"""다음 텍스트에서 요리 레시피 정보를 JSON으로 추출하세요.
 
 요구사항:
 - dish_name: 요리명 (필수)
+- category: 이 요리의 핵심이 되는 카테고리(요리명)를 추출하세요.
+  - 규칙 1: '고추장', '간장', '매운', '백종원'과 같은 **부가 설명**이나, '돼지고기', '소고기'처럼 **핵심 재료 외의 추가 재료**는 카테고리 이름에서 **제외**해야 합니다.
+  - 규칙 2: 요리 방식(예: '볶음', '구이')만 추출하는 것이 아니라, **요리명 자체**를 추출해야 합니다.
+  - 예시 1: dish_name이 '매콤한 고추장 오징어볶음'이면 category는 '오징어볶음'입니다.
+  - 예시 2: dish_name이 '돼지고기 오징어 볶음'이면 category는 '오징어볶음'입니다.
+  - 예시 3: dish_name이 '김치 돼지고기 짜글이'면 category는 '김치짜글이' 또는 '짜글이'입니다.
 - ingredients: [{{"name":"재료명", "quantity":"수량"}}] 형태 배열  
 - recipe: [{{"step":번호, "instruction":"조리과정"}}] 형태 배열
 - difficulty: 요리 난이도 ("매우 쉬움", "쉬움", "보통", "어려움", "매우 어려움" 중 하나)
