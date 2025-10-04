@@ -35,6 +35,8 @@ class LLMExtractor:
   - **예시 1**: dish_name이 '매콤한 고추장 오징어볶음'이면 category는 '오징어볶음'입니다.
   - **예시 2**: dish_name이 '돼지고기 오징어 볶음'이면 category는 '오징어볶음'입니다.
 - ingredients: [ {{"name":"재료명", "quantity":"수량"}} ] 형태 배열
+  - **규칙 1**: 'name' 필드에는 **재료의 핵심 이름**만 포함해야 합니다. (예: '찌개용 두부', '두부(국물인는 것)' 대신 **'두부'**만 추출). 핵심 이름을 벗어나는 모든 수식어(용도, 상태, 제조사)는 제거해야 합니다.
+  - **규칙 2**: 추출된 재료 이름은 **띄어쓰기를 제거하지 않고** 한국어 표준 표기를 따릅니다.
 - recipe: [ {{"step":번호, "instruction":"조리과정"}} ] 형태 배열
 - difficulty: 요리 난이도 (예: "쉬움", "보통", "어려움"). 텍스트에 없다면 빈 문자열.
 - cooking_time: 총 요리 시간 (예: "30분", "1시간 30분"). 텍스트에 없다면 빈 문자열.
@@ -137,6 +139,24 @@ JSON:"""
                     cleaned_category = category.replace(" ", "") 
                     video_data['category'] = cleaned_category
                     extracted_info['category'] = cleaned_category
+
+                if 'ingredients' in video_data:
+                    cleaned_ingredients = []
+                    for item in video_data['ingredients']:
+                        original_name = item.get('name', '').strip()
+                        
+                        if not original_name:
+                            continue
+                            
+                        name_without_parenthesis = re.sub(r'\s*\(.*\)', '', original_name).strip()
+                        
+                        final_name_no_space = name_without_parenthesis.replace(" ", "") 
+                        
+                    
+                        item['name'] = final_name_no_space
+                        cleaned_ingredients.append(item)
+                        
+                    video_data['ingredients'] = cleaned_ingredients
 
                 cleaned_data = self._clean_extracted_data(video_data)
                 
