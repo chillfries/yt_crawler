@@ -3,7 +3,7 @@
 import json
 import google.generativeai as genai
 import re
-import asyncio # 비동기 처리를 위해 추가
+import asyncio
 from datetime import datetime, timezone
 from utils.config import Config
 from utils.db_handler import DBHandler
@@ -14,7 +14,6 @@ class LLMExtractor:
         self.logger = Logger("llm_extractor.log", Config.LOG_LEVEL).get_logger()
         self.db = DBHandler()
         self.llm = self._setup_llm_api()
-        # LLM 동시 요청 수 제어 세마포어 추가 (속도 개선)
         self.semaphore = asyncio.Semaphore(Config.CONCURRENCY_LIMIT) 
         
     def _setup_llm_api(self):
@@ -22,18 +21,17 @@ class LLMExtractor:
             self.logger.error("GEMINI_API_KEY is not set in config.")
             return None
         genai.configure(api_key=Config.GEMINI_API_KEY)
-        # 모델을 'gemini-2.5-flash'로 변경
         return genai.GenerativeModel('gemini-2.5-flash') 
 
     def _generate_prompt(self, text):
-        # 카테고리, 난이도, 요리 시간을 포함한 프롬프트로 업데이트
         prompt = f"""다음 텍스트에서 요리 레시피 정보를 JSON으로 추출하세요.
 
 요구사항:
 - dish_name: 요리명 (필수)
 - category: **이 요리의 핵심이 되는 카테고리(요리명)를 추출하세요.**
   - **규칙 1**: '고추장', '간장', '매운', '백종원'과 같은 **부가 설명**이나, '돼지고기', '소고기'처럼 **핵심 재료 외의 추가 재료**는 카테고리 이름에서 **제외**해야 합니다.
-  - **규칙 2**: 요리 방식(예: '볶음', '구이')만 추출하는 것이 아니라, **요리명 자체**를 추출해야 합니다.
+  - **규칙 2**: 요리 방식(예: '볶음', '구이')만 추출하는 것이 아니라, **요리명 자체**를 추출해야 합니다
+  - **규칙 3**: 추출된 카테고리 이름은 **띄어쓰기 없이** 붙여서 작성해야 합니다. (예: '멸치 볶음' → '멸치볶음')
   - **예시 1**: dish_name이 '매콤한 고추장 오징어볶음'이면 category는 '오징어볶음'입니다.
   - **예시 2**: dish_name이 '돼지고기 오징어 볶음'이면 category는 '오징어볶음'입니다.
 - ingredients: [ {{"name":"재료명", "quantity":"수량"}} ] 형태 배열
@@ -49,7 +47,6 @@ JSON:"""
         return prompt
 
     def _validate_extracted_data(self, extracted_info):
-        # 필수 필드에 난이도, 요리 시간, 카테고리 추가
         if not extracted_info:
             return False, "No data extracted"
         
@@ -66,7 +63,6 @@ JSON:"""
         if not category or len(category) < 2:
              return False, "Category name too short or empty"
         
-        # 재료 및 레시피 배열 검증
         if not isinstance(extracted_info.get('ingredients'), list) or len(extracted_info['ingredients']) < 1:
             return False, "Ingredients list invalid or empty"
         if not isinstance(extracted_info.get('recipe'), list) or len(extracted_info['recipe']) < 1:
@@ -77,10 +73,8 @@ JSON:"""
     def _extract_with_llm(self, text):
         prompt = self._generate_prompt(text)
         try:
-            # 이 메서드는 run 메서드에서 asyncio.to_thread로 감싸져 동기적으로 실행됨
             response = self.llm.generate_content(prompt)
             
-            # JSON 파싱
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', response.text, re.DOTALL)
             if json_match:
                 json_string = json_match.group(1)
@@ -95,31 +89,25 @@ JSON:"""
             return None, f"LLM extraction error: {e}"
 
     def _clean_extracted_data(self, video_data):
-        # 기존 데이터를 덮어쓰지 않고 업데이트합니다.
-        # 이 메서드는 추출된 정보가 추가된 video_data를 받아 정리하는 역할
         video_data['metadata']['extracted_at'] = datetime.now(timezone.utc).isoformat()
         return video_data
 
-    # NEW: 비동기 처리를 위한 헬퍼 메서드
     async def _process_video_async(self, index, total_count, video):
         video_id = video.get('video_id', 'unknown')
         video_data = video.get('data', {})
         
-        async with self.semaphore: # 동시성 제한 적용
+        async with self.semaphore:
             self.logger.info(f"처리 중... ({index}/{total_count}) {video_id}")
             
             try:
-                # 1. 텍스트 준비 및 길이 제한 적용 (속도 최적화)
                 clean_desc = video_data.get('clean_description', '')
                 clean_captions = video_data.get('clean_captions', '')
                 
                 MAX_CHARS = Config.LLM_MAX_INPUT_CHARS
                 
-                # 자막이 너무 길면 잘라냄
                 if len(clean_captions) > MAX_CHARS:
                     clean_captions = clean_captions[:MAX_CHARS] + " [이후 자막 생략됨]"
 
-                # 설명과 자막을 합치고 전체 길이 제한
                 source_text = (clean_desc + " " + clean_captions).strip()
                 if len(source_text) > MAX_CHARS:
                     source_text = source_text[:MAX_CHARS] + " [전체 텍스트 길이 제한으로 생략됨]"
@@ -129,12 +117,10 @@ JSON:"""
                     self.db.insert_skipped_video(video_id, reason, f"https://www.youtube.com/watch?v={video_id}")
                     self.db.delete_video(video_id)
                     self.logger.warning(f"[{video_id}] Skipping: {reason}")
-                    return 0, 1 # (success, failed)
+                    return 0, 1
                 
-                # 2. LLM 추출 (await asyncio.to_thread로 동기 함수를 비동기로 호출)
                 extracted_info, llm_error = await asyncio.to_thread(self._extract_with_llm, source_text)
 
-                # 3. 데이터 품질 검증
                 is_valid, reason = self._validate_extracted_data(extracted_info)
                 
                 if not is_valid:
@@ -144,8 +130,14 @@ JSON:"""
                     print(f"스킵: {video_id} - {reason}")
                     return 0, 1
 
-                # 4. 데이터 통합 및 DB 저장
                 video_data.update(extracted_info)
+
+                category = extracted_info.get('category', '').strip()
+                if category:
+                    cleaned_category = category.replace(" ", "") 
+                    video_data['category'] = cleaned_category
+                    extracted_info['category'] = cleaned_category
+
                 cleaned_data = self._clean_extracted_data(video_data)
                 
                 if self.db.insert_or_update_video(video_id, cleaned_data):
@@ -167,7 +159,6 @@ JSON:"""
                     pass
                 return 0, 1
 
-    # run 메서드를 async 함수로 변경
     async def run(self):
         self.db.connect()
         videos = self.db.get_cleaned_videos()
@@ -178,7 +169,6 @@ JSON:"""
         for i, video in enumerate(videos, 1):
             tasks.append(self._process_video_async(i, total_count, video))
 
-        # 모든 작업을 병렬로 실행
         results = await asyncio.gather(*tasks)
         
         success_count = sum(res[0] for res in results)
